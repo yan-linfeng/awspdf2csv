@@ -7,9 +7,11 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.apache.commons.io.Charsets;
 import org.apache.pdfbox.Loader;
@@ -30,6 +32,7 @@ public class AwsBilling2Csv extends PDFTextStripper {
     private static String lv3 = "";
     private static String lv4 = "";
     private static float y = 0f;
+    private static boolean isLv4 = false;
 
     public AwsBilling2Csv() throws IOException {}
 
@@ -56,6 +59,7 @@ public class AwsBilling2Csv extends PDFTextStripper {
     protected void writeString(String string, List<TextPosition> textPositions) throws IOException {
         TextPosition firstCharPosition = textPositions.get(0);
         float x = firstCharPosition.getX();
+        float fontSizePt = firstCharPosition.getFontSizeInPt();
         float currentY = firstCharPosition.getEndY();
         float fontSize = firstCharPosition.getFontSize();
 
@@ -68,41 +72,57 @@ public class AwsBilling2Csv extends PDFTextStripper {
                 System.out.println("Parsing AWS Billing PDF End");
                 return;
             }
-            if ("説明".equals(string) && fontSize == 10.66f && x == 6.0025215f) {
-                // This is a column header, ignore this line and continue
+
+            Set<String> headers = new HashSet<>(3);
+            headers.add("説明");
+            headers.add("使⽤量");
+            headers.add("⾦額 USD");
+            // if (headers.contains(string) && fontSize > 10.6f && fontSize < 10.7f && fontSizePt >= 6.9f && fontSizePt <= 7.1f) {
+            if (headers.contains(string)) {
                 return;
             }
+            
             // possible font size: 14.66 12.0 10.66 10.0
             // possible x values: 0.0 6.0025215 10.504413 21.008825
+            // System.out.println(x);
+            // System.out.println(fontSize);
+            System.out.println(x);
             if (x == 0f && fontSize == 14.66f) {
                 // Lv1
                 lv1 = string;
                 parsedBillingTree.put(lv1, new LinkedHashMap<>());
-            } else if (x == 6.0025215f && fontSize == 12.0f) {
+            } else if (x >= 6f && x <= 6.1f && fontSize == 12.0f) {
                 // Lv2
                 lv2 = string;
                 parsedBillingTree.get(lv1).put(lv2, new LinkedHashMap<>());
-            } else if (x == 6.0025215f && fontSize == 10.66f) {
+            } else if (x >= 6f && x <= 6.1f && fontSize == 10.66f) {
                 // lv3
                 lv3 = string;
                 parsedBillingTree.get(lv1).get(lv2).put(lv3, new LinkedHashMap<>());
-            } else if (x == 10.504413f && fontSize == 10.0f) {
+            } else if (x >= 10.2f && x <= 10.6f && fontSize == 10.0f) {
                 // lv4
                 lv4 = string;
                 parsedBillingTree.get(lv1).get(lv2).get(lv3).put(lv4, new ArrayList<String[]>());
-            } else if (x >= 21.008825f && fontSize == 10.0f) {
+            } else if (x >= 20f && fontSize == 10.0f) {
                 // lv5
                 List<String[]> lv5List = parsedBillingTree.get(lv1).get(lv2).get(lv3).get(lv4);
+
                 if (currentY != y) {
+                    if(lv5List == null){
+                        lv4 = "placeholder";
+                        parsedBillingTree.get(lv1).get(lv2).get(lv3).put(lv4, new ArrayList<String[]>());
+                        return;
+                        // System.out.println(lv5List);
+                    }
                     // merge two lines into one record when one record span over 2 lines
                     mergeLines2OneRecord(lv5List);
 
                     String[] record = new String[3];
-                    if (x == 21.008825f) {
+                    if (x >= 20f && x<= 22f) {
                         record[0] = string;
-                    } else if (x == 384.91168f) {
+                    } else if (x >= 380f && x <= 386f) {
                         record[1] = string;
-                    } else if (x >= 470f) {
+                    } else if (x >= 450f) {
                         record[2] = string;
                     }
                     lv5List.add(record);
@@ -112,9 +132,9 @@ public class AwsBilling2Csv extends PDFTextStripper {
                         System.out.println(lv5List);
                     }
                     String[] record = lv5List.get(lv5List.size() - 1);
-                    if (x == 384.91168f) {
+                    if (x >= 380f && x <= 386f) {
                         record[1] = string;
-                    } else if (x >= 470f) {
+                    } else if (x >= 450f) {
                         record[2] = string;
                     }
                 }
@@ -172,7 +192,7 @@ public class AwsBilling2Csv extends PDFTextStripper {
     }
 
     private void mergeLines2OneRecord(List<String[]> records) {
-        if (records.size() < 2) {
+        if (records == null ||records.size() < 2) {
             return;
         }
 
